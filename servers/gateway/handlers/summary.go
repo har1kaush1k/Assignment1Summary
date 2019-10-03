@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"github.com/mitchellh/mapstructure"
 	"golang.org/x/net/html"
 	"io"
 	"net/http"
@@ -110,24 +111,37 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 	*/
 
 	tokenizer := html.NewTokenizer(htmlStream)
-	for {
+	pageSummary := &PageSummary{}
+	structMap := map[string]string{}
+	shouldLoop := true
+	for(shouldLoop) {
 		tokenType := tokenizer.Next()
+		//fmt.Println(tokenType)
+		//fmt.Println(tokenizer.Token())
+		//fmt.Println(html.StartTagToken)
 		switch tokenType {
 		case html.ErrorToken:
 			err := tokenizer.Err()
 			if err == io.EOF {
 				//end of the file, break out of the loop
-				break
+				shouldLoop = false
 			}
 			return nil, tokenizer.Err()
+		//case html.StartTagToken:
 		case html.StartTagToken:
-		case html.SelfClosingTagToken:
+			//fmt.Println("found StartTagToken")
+
 			if tokenizer.Token().Data == "meta" {
+				fieldName := "Type"
+				fmt.Println("found meta")
 				for _, element := range tokenizer.Token().Attr {
+					// fmt.Println(element)
 					if element.Key == "property" {
 						switch element.Val {
 						case "og:type":
+							fieldName = "Type"
 						case "og:url":
+							fieldName = "URL"
 						case "og:title":
 						case "og:site_name":
 						case "og:description":
@@ -140,11 +154,18 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 						case "keywords":
 
 						}
+					} else if element.Key == "content" {
+						structMap[fieldName] = element.Val
 					}
 				}
 			}
 		}
-	}
+		mapstructure.Decode(structMap, &pageSummary)
+		fmt.Println(pageSummary)
 
-	return nil, nil
+	}
+	return pageSummary, nil
+
+	//return nil, nil
 }
+
