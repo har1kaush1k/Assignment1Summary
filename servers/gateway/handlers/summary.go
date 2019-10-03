@@ -7,6 +7,7 @@ import (
 	"golang.org/x/net/html"
 	"io"
 	"net/http"
+	"strings"
 )
 
 //PreviewImage represents a preview image for a page
@@ -111,10 +112,12 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 	*/
 
 	tokenizer := html.NewTokenizer(htmlStream)
-	pageSummary := &PageSummary{}
+	var pageSummary PageSummary
 	structMap := map[string]string{}
+	imageMap := map[string]string{}
+	imageField := ""
 	shouldLoop := true
-	for(shouldLoop) {
+	for shouldLoop {
 		tokenType := tokenizer.Next()
 		//fmt.Println(tokenType)
 		//fmt.Println(tokenizer.Token())
@@ -130,11 +133,11 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 		//case html.StartTagToken:
 		case html.StartTagToken:
 			//fmt.Println("found StartTagToken")
-
-			if tokenizer.Token().Data == "meta" {
+			token := tokenizer.Token()
+			if token.Data == "meta" {
 				fieldName := "Type"
 				fmt.Println("found meta")
-				for _, element := range tokenizer.Token().Attr {
+				for _, element := range token.Attr {
 					// fmt.Println(element)
 					if element.Key == "property" {
 						switch element.Val {
@@ -143,29 +146,88 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 						case "og:url":
 							fieldName = "URL"
 						case "og:title":
+							fieldName = "Title"
 						case "og:site_name":
+							fieldName = "SiteName"
 						case "og:description":
+							fieldName = "Description"
 						case "og:image":
+							fieldName = "Images"
+						case "og:image:url":
+							imageField = "URL"
+						case "og:image:secure_url":
+							imageField = "SecureURL"
+						case "og:image:type":
+							imageField = "Type"
+						case "og:image:width":
+							imageField = "Width"
+						case "og:image:height":
+							imageField = "Height"
+						case "og:image:alt":
+							imageField = "Alt"
+
 						}
 					} else if element.Key == "name" {
 						switch element.Val {
 						case "description":
+							fieldName = "Description"
 						case "author":
+							fieldName = "Author"
 						case "keywords":
-
+							fieldName = "Keywords"
 						}
 					} else if element.Key == "content" {
 						structMap[fieldName] = element.Val
+						imageMap[imageField] = element.Val
 					}
 				}
 			}
+			if token.Data == "link" {
+
+			}
 		}
-		mapstructure.Decode(structMap, &pageSummary)
-		fmt.Println(pageSummary)
+		pageSummary = *initializeSummary(&structMap, &imageMap)
+		fmt.Println(structMap)
 
 	}
-	return pageSummary, nil
+	return &pageSummary, nil
 
 	//return nil, nil
+}
+
+func initializeSummary(summaryMap *map[string]string, imageMap *map[string]string) *PageSummary  {
+	res := PageSummary{}
+	for key, val := range *summaryMap{
+		switch key {
+		case "Type":
+			res.Type = val
+		case "URL":
+			res.URL = val
+		case "Title":
+			res.Title = val
+		case "SiteName":
+			res.SiteName = val
+		case "Description":
+			res.Description = val
+		case "Author":
+			res.Author = val
+		case "Keywords":
+			arr := strings.Split(val, ",")
+			res.Keywords = arr
+		case "Icon":
+
+
+			res.Icon = val
+		case "Images":
+			imageArr := make([]PreviewImage, 1)
+			for k, v := range *imageMap {
+				switch k {
+
+				}
+			}
+			res.Images = val
+		}
+	}
+	return &res
 }
 

@@ -1,9 +1,9 @@
 package main
 
 import (
+	"Assignment1Summary/servers/gateway/handlers"
 	"log"
 	"net/http"
-	"Assignment1Summary/servers/gateway/handlers"
 	"os"
 )
 
