@@ -1,5 +1,12 @@
 package main
 
+import (
+	"log"
+	"net/http"
+	"Assignment1Summary/servers/gateway/handlers"
+	"os"
+)
+
 //main is the main entry point for the server
 func main() {
 	/* TODO: add code to do the following
@@ -13,5 +20,17 @@ func main() {
 	  the root handler. Use log.Fatal() to report any errors
 	  that occur when trying to start the web server.
 	*/
+
+	addr := os.Getenv("ADDR")
+	if len(addr) == 0 {
+		addr = ":80"
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/summary", handlers.SummaryHandler)
+
+	//start the web zipserver
+	log.Printf("server is listening at https://%s", addr)
+	log.Fatal(http.ListenAndServe(addr, mux))
 
 }
