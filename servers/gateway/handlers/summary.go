@@ -215,6 +215,7 @@ func initializeSummary(summaryMap *map[string]string, imageMap *map[string]strin
 			arr := strings.Split(val, ",")
 			res.Keywords = arr
 		case "Icon":
+			icon := PreviewImage{}
 
 
 			res.Icon = val
@@ -222,7 +223,12 @@ func initializeSummary(summaryMap *map[string]string, imageMap *map[string]strin
 			imageArr := make([]PreviewImage, 1)
 			for k, v := range *imageMap {
 				switch k {
-
+				case "URL":
+				case "SecureURL":
+				case "Type":
+				case "Width":
+				case "Height":
+				case "Alt":
 				}
 			}
 			res.Images = val
