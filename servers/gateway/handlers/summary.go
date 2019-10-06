@@ -1,12 +1,14 @@
 package handlers
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
-	"github.com/mitchellh/mapstructure"
+	"log"
 	"golang.org/x/net/html"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -61,6 +63,25 @@ func SummaryHandler(w http.ResponseWriter, r *http.Request) {
 	https://golang.org/pkg/net/http/#Error
 	https://golang.org/pkg/encoding/json/#NewEncoder
 	*/
+	w.Header().Add("Access-Control-Allow-Origin", "*")
+	w.Header().Add("Content-Type", "application/json")
+	url := r.URL.Query().Get("url")
+	if len(url) == 0 {
+		http.Error(w, "No query found in the requested url", http.StatusBadRequest)
+	}
+	response, err := fetchHTML(url)
+	if err != nil {
+		log.Fatal("could not fetch url ")
+	}
+	targetSummary, err := extractSummary(url, response)
+	if err != nil {
+		log.Fatal("error extracting summary")
+	}
+	jsonError := json.NewEncoder(w).Encode(targetSummary)
+	if jsonError != nil {
+		log.Fatal("Error encoding the summary to json")
+	}
+
 }
 
 //fetchHTML fetches `pageURL` and returns the body stream or an error.
@@ -82,16 +103,17 @@ func fetchHTML(pageURL string) (io.ReadCloser, error) {
 	https://golang.org/pkg/net/http/#Get
 	*/
 	resp, err := http.Get(pageURL)
-	fmt.Println(resp.Status)
+
 	if resp.StatusCode >= 400 {
-		fmt.Println(err)
-		return nil, errors.New("Status code not 200 OK")
+		return nil, fmt.Errorf("response status code was %d", resp.StatusCode)
 	}
-	if resp.Header.Get("Content-Type") != "text/html; charset=utf-8" {
-		return nil, errors.New("Content-Type is not text/html")
+
+	ctype := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(ctype, "text/html") {
+		return nil, fmt.Errorf("response content type was %s, not text/html", ctype)
 	}
-	defer resp.Body.Close()
-	return resp.Body, nil
+
+	return resp.Body, err
 }
 
 //extractSummary tokenizes the `htmlStream` and populates a PageSummary
@@ -110,130 +132,130 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 	https://developers.facebook.com/docs/reference/opengraph/
 	https://golang.org/pkg/net/url/#URL.ResolveReference
 	*/
+	resSummary := &PageSummary{}
 
 	tokenizer := html.NewTokenizer(htmlStream)
-	var pageSummary PageSummary
-	structMap := map[string]string{}
-	imageMap := map[string]string{}
-	imageField := ""
-	shouldLoop := true
-	for shouldLoop {
+
+	for {
 		tokenType := tokenizer.Next()
-		//fmt.Println(tokenType)
-		//fmt.Println(tokenizer.Token())
-		//fmt.Println(html.StartTagToken)
-		switch tokenType {
-		case html.ErrorToken:
+		token := tokenizer.Token()
+		if tokenType == html.ErrorToken {
 			err := tokenizer.Err()
 			if err == io.EOF {
-				//end of the file, break out of the loop
-				shouldLoop = false
+				break
 			}
-			return nil, tokenizer.Err()
-		//case html.StartTagToken:
-		case html.StartTagToken:
-			//fmt.Println("found StartTagToken")
-			token := tokenizer.Token()
+			return nil, err
+		}
+		if tokenType == html.StartTagToken || tokenType == html.SelfClosingTagToken {
 			if token.Data == "meta" {
-				fieldName := "Type"
-				fmt.Println("found meta")
-				for _, element := range token.Attr {
-					// fmt.Println(element)
-					if element.Key == "property" {
-						switch element.Val {
-						case "og:type":
-							fieldName = "Type"
-						case "og:url":
-							fieldName = "URL"
-						case "og:title":
-							fieldName = "Title"
-						case "og:site_name":
-							fieldName = "SiteName"
-						case "og:description":
-							fieldName = "Description"
-						case "og:image":
-							fieldName = "Images"
-						case "og:image:url":
-							imageField = "URL"
-						case "og:image:secure_url":
-							imageField = "SecureURL"
-						case "og:image:type":
-							imageField = "Type"
-						case "og:image:width":
-							imageField = "Width"
-						case "og:image:height":
-							imageField = "Height"
-						case "og:image:alt":
-							imageField = "Alt"
+				property := getTargetAttr(token, "property")
+				name := getTargetAttr(token, "name")
+				content := getTargetAttr(token, "content")
+				switch property {
+				case "og:type":
+					resSummary.Type = content
+				case "og:url":
+					resSummary.URL = content
+				case "og:title":
+					resSummary.Title = content
+				case "og:site_name":
+					resSummary.SiteName = content
+				}
+				if property == "og:description" {
+					resSummary.Description = content
+				} else if name == "description" && resSummary.Description == "" {
+					resSummary.Description = content
+				}
 
+				if name == "author" {
+					resSummary.Author = content
+				}
+
+				if name == "keywords" {
+					arr := strings.Split(content, ",")
+					for i := range arr {
+						arr[i] = strings.TrimSpace(arr[i])
+					}
+					resSummary.Keywords = arr
+				}
+
+				if strings.HasPrefix(property, "og:image") {
+					if strings.HasPrefix(property, "og:image:") {
+						recentImage := resSummary.Images[len(resSummary.Images)-1]
+						switch property {
+						case "og:image:secure_url":
+							recentImage.SecureURL = getAbsoluteURL(pageURL, content)
+						case "og:image:alt":
+							recentImage.Alt = content
+						case "og:image:type":
+							recentImage.Type = content
+						case "og:image:width":
+							recentImage.Width, _ = strconv.Atoi(content)
+						case "og:image:height":
+							recentImage.Height, _ = strconv.Atoi(content)
 						}
-					} else if element.Key == "name" {
-						switch element.Val {
-						case "description":
-							fieldName = "Description"
-						case "author":
-							fieldName = "Author"
-						case "keywords":
-							fieldName = "Keywords"
+					} else {
+						newImg := &PreviewImage{}
+						if !strings.HasPrefix(content, "http://") {
+							content= getAbsoluteURL(pageURL, content)
 						}
-					} else if element.Key == "content" {
-						structMap[fieldName] = element.Val
-						imageMap[imageField] = element.Val
+						newImg.URL = content
+						resSummary.Images = append(
+							resSummary.Images, newImg)
 					}
 				}
 			}
-			if token.Data == "link" {
-
-			}
-		}
-		pageSummary = *initializeSummary(&structMap, &imageMap)
-		fmt.Println(structMap)
-
-	}
-	return &pageSummary, nil
-
-	//return nil, nil
-}
-
-func initializeSummary(summaryMap *map[string]string, imageMap *map[string]string) *PageSummary  {
-	res := PageSummary{}
-	for key, val := range *summaryMap{
-		switch key {
-		case "Type":
-			res.Type = val
-		case "URL":
-			res.URL = val
-		case "Title":
-			res.Title = val
-		case "SiteName":
-			res.SiteName = val
-		case "Description":
-			res.Description = val
-		case "Author":
-			res.Author = val
-		case "Keywords":
-			arr := strings.Split(val, ",")
-			res.Keywords = arr
-		case "Icon":
-			icon := PreviewImage{}
-
-
-			res.Icon = val
-		case "Images":
-			imageArr := make([]PreviewImage, 1)
-			for k, v := range *imageMap {
-				switch k {
-				case "URL":
-				case "SecureURL":
-				case "Type":
-				case "Width":
-				case "Height":
-				case "Alt":
+			if token.Data == "title" && resSummary.Title == "" {
+				next := tokenizer.Next()
+				if next == html.TextToken {
+					resSummary.Title = tokenizer.Token().Data
 				}
 			}
-			res.Images = val
+
+			if token.Data == "link" {
+				icon := &PreviewImage{}
+				rel := getTargetAttr(token, "rel")
+				if rel == "icon" {
+					icon.URL = getTargetAttr(token, "href")
+					icon.Type = getTargetAttr(token, "type")
+					icon.Alt  = getTargetAttr(token, "alt")
+					sizes  := getTargetAttr(token, "sizes")
+
+					if !strings.HasPrefix(icon.URL, "http://") {
+						relative, _ := url.Parse(icon.URL)
+						absolutePattern, _ := url.Parse(pageURL)
+						icon.URL = absolutePattern.ResolveReference(relative).String()
+					}
+					if sizes != "any" && sizes != "" {
+						sizeSlice := strings.Split(sizes, "x")
+						icon.Height, _ = strconv.Atoi(sizeSlice[0])
+						icon.Width, _ = strconv.Atoi(sizeSlice[1])
+					}
+				}
+				resSummary.Icon = icon
+			}
+		}
+
+		if tokenType == html.EndTagToken && token.Data == "head" {
+			break
 		}
 	}
-	return &res
+	return resSummary, nil
+}
+
+
+func getTargetAttr(token html.Token, target string) string {
+	for _, a := range token.Attr {
+		if a.Key == target {
+			return a.Val
+		}
+	}
+	return ""
+}
+
+func getAbsoluteURL(absoluteBase string, relative string) string {
+	absoluteURL, _ := url.Parse(absoluteBase)
+	relativeURL, _ := url.Parse(relative)
+	return absoluteURL.ResolveReference(relativeURL).String()
 }
 
