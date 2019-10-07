@@ -16,17 +16,32 @@
 <head>
     <meta charset="utf-8">
     <title>Call Go</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
     <script type="text/javascript">
         $(document).ready(function () {
-            var link = document.getElementById("linkInput").value;
             $("#callGo").on('click', function () {
+                let link = document.getElementById("linkInput").value;
                 $.ajax({
                     url: "http://localhost:4000/v1/summary",
                     method: "GET",
+                    dataType: "json",
+                    data: {
+                        url: link
+                    },
                     success: function (data) {
-                        $("#response").html(data.title);
-                        $("#response").html(data.description);
-                        $("#response").html(data.images);
+                        console.log("requested");
+                        console.log(data.title);
+                        $("#title").text(data.title);
+                        $("#description").text(data.description);
+
+                        let imgArr = data.images;
+                        $("#images").empty();
+                        imgArr.forEach((image) => {
+                            let img = $('<img>');
+                            img.attr('src', image.url);
+                            img.appendTo("#images");
+                        });
+
                     },
                     error: function (jqXHR, exception) {
                         var msg = '';
@@ -58,14 +73,12 @@
     <button id="callGo" type="submit">Call Go Code</button>
     <div id="error"></div>
     <div id="response">
-        <div id="title">
+        <p id="title">
 
-        </div>
-        <div id="description">
-
-        </div>
+        </p>
+        <p id="description">
+        </p>
         <div id="images">
-
         </div>
     </div>
 
