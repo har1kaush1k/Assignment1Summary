@@ -31,11 +31,13 @@
                     success: function (data) {
                         console.log("requested");
                         console.log(data.title);
-                        $("#title").text(data.title);
-                        $("#description").text(data.description);
-
+                        $("#title").text(missingCheck(data.title));
+                        $("#description").text(missingCheck(data.description));
                         let imgArr = data.images;
                         $("#images").empty();
+                        if (imgArr.length == 0) {
+                            return (<p>No images available</p>)
+                        }
                         imgArr.forEach((image) => {
                             let img = $('<img>');
                             img.attr('src', image.url);
@@ -65,6 +67,13 @@
                 });
             });
         });
+
+        function missingCheck(data) {
+            if (data == null || data == undefined) {
+                return (<p>No data found</p>)
+            }
+            return data;
+        }
     </script>
 </head>
 
