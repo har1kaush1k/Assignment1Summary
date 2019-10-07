@@ -36,7 +36,7 @@
                         let imgArr = data.images;
                         $("#images").empty();
                         if (imgArr.length == 0) {
-                            return (<p>No images available</p>)
+                            $('#error').html('<p>No images available</p>')
                         }
                         imgArr.forEach((image) => {
                             let img = $('<img>');
@@ -70,7 +70,7 @@
 
         function missingCheck(data) {
             if (data == null || data == undefined) {
-                return (<p>No data found</p>)
+                $('#error').html('<p>No images available</p>')
             }
             return data;
         }
