@@ -7,7 +7,8 @@ import (
 	"os"
 )
 
-//main is the main entry point for the server
+// The main function is the main entry point for the server
+// It essentially handles the paths each of the go files need to work for
 func main() {
 	/* TODO: add code to do the following
 	- Read the ADDR environment variable to get the address
@@ -21,15 +22,22 @@ func main() {
 	  that occur when trying to start the web server.
 	*/
 
+	//Getting the value of the ADDR environment variable
 	addr := os.Getenv("ADDR")
+
+	//If ADDR is blank, default to ":80"
 	if len(addr) == 0 {
 		addr = ":80"
 	}
 
+	//Create a mux
 	mux := http.NewServeMux()
+	//Assign the SummaryHandler function to the mux path "/v1/summary"
 	mux.HandleFunc("/v1/summary", handlers.SummaryHandler)
 
-	//start the web zipserver
+	//Start the web zipserver and report errors
+	//We use Log.Fatal as this is command line utliity otherwise 
+	//we would use http.Error() to respond to a client
 	log.Printf("server is listening at https://%s", addr)
 	log.Fatal(http.ListenAndServe(addr, mux))
 

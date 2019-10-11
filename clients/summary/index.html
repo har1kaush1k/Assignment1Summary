@@ -1,4 +1,4 @@
-<!-- <!DOCTYPE html>
+﻿<!-- <!DOCTYPE html>
 <html>
 <body>
 
@@ -21,6 +21,7 @@
         $(document).ready(function () {
             $("#callGo").on('click', function () {
                 let link = document.getElementById("linkInput").value;
+                //Ajax request
                 $.ajax({
                     url: "http://localhost:4000/v1/summary",
                     method: "GET",
@@ -28,6 +29,8 @@
                     data: {
                         url: link
                     },
+                    //Rendering the summary data to the page 
+                    // as HTML elements
                     success: function (data) {
                         console.log("requested");
                         console.log(data.title);
@@ -38,6 +41,8 @@
                         if (imgArr.length == 0) {
                             $('#error').html('<p>No images available</p>')
                         }
+
+                        //Rendering the images
                         imgArr.forEach((image) => {
                             let img = $('<img>');
                             img.attr('src', image.url);
@@ -45,6 +50,8 @@
                         });
 
                     },
+
+                    //Errors communicated to the User
                     error: function (jqXHR, exception) {
                         var msg = '';
                         if (jqXHR.status === 0) {
@@ -68,6 +75,7 @@
             });
         });
 
+        // Funciton to ensure data is not missing
         function missingCheck(data) {
             if (data == null || data == undefined) {
                 $('#error').html('<p>No images available</p>')

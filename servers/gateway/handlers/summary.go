@@ -35,11 +35,10 @@ type PageSummary struct {
 	Images      []*PreviewImage `json:"images,omitempty"`
 }
 
-//SummaryHandler handles requests for the page summary API.
-//This API expects one query string parameter named `url`,
-//which should contain a URL to a web page. It responds with
-//a JSON-encoded PageSummary struct containing the page summary
-//meta-data.
+
+// This function handles the requests for the page summary API
+// It takes in a URL string parameter and returns a JSON-encoeded
+// struct that contains the page summary meta-data
 func SummaryHandler(w http.ResponseWriter, r *http.Request) {
 	/*TODO: add code and additional functions to do the following:
 	- Add an HTTP header to the response with the name
@@ -63,20 +62,31 @@ func SummaryHandler(w http.ResponseWriter, r *http.Request) {
 	https://golang.org/pkg/net/http/#Error
 	https://golang.org/pkg/encoding/json/#NewEncoder
 	*/
+	// Allowing cross-origin AJAX requests to the server
 	w.Header().Add("Access-Control-Allow-Origin", "*")
 	w.Header().Add("Content-Type", "application/json")
+
+	// Grabbiing the URL and throwing an error if not supplied
 	url := r.URL.Query().Get("url")
 	if len(url) == 0 {
 		http.Error(w, "No query found in the requested url", http.StatusBadRequest)
 	}
+
+	// Fetching URL
 	response, err := fetchHTML(url)
 	if err != nil {
 		log.Fatal("could not fetch url ")
 	}
+
+	// Extracting page summary meta-data, throwing error if nil
+	// Closing within extractSumary method
 	targetSummary, err := extractSummary(url, response)
 	if err != nil {
 		log.Fatal("error extracting summary")
 	}
+
+	// Responded with JSON-encoded version of PageSummary struct
+	// Throws an error if it returns nil
 	jsonError := json.NewEncoder(w).Encode(targetSummary)
 	if jsonError != nil {
 		log.Fatal("Error encoding the summary to json")
@@ -84,9 +94,10 @@ func SummaryHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-//fetchHTML fetches `pageURL` and returns the body stream or an error.
-//Errors are returned if the response status code is an error (>=400),
-//or if the content type indicates the URL is not an HTML page.
+
+// Fetching the 'pageURL' and returning the body stream of the page
+// If response status is >= 400 or if content type does not 
+// indicate that the content is a web page, return a nil stream and an error
 func fetchHTML(pageURL string) (io.ReadCloser, error) {
 	/*TODO: Do an HTTP GET for the page URL. If the response status
 	code is >= 400, return a nil stream and an error. If the response
@@ -102,22 +113,33 @@ func fetchHTML(pageURL string) (io.ReadCloser, error) {
 	Helpful Links:
 	https://golang.org/pkg/net/http/#Get
 	*/
+
+	// Getting the URL
 	resp, err := http.Get(pageURL)
 
+
+	// Return status coded if status is less than 400
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("response status code was %d", resp.StatusCode)
 	}
 
+	// Get and check the content type from the header
 	ctype := resp.Header.Get("Content-Type")
 	if !strings.HasPrefix(ctype, "text/html") {
 		return nil, fmt.Errorf("response content type was %s, not text/html", ctype)
 	}
 
+	// Closing the response body
+	// This code wasn't in the orginal plan we submitted
+	// but I think we are missing it:
+	// defer resp.Body.Close()
+
 	return resp.Body, err
 }
 
-//extractSummary tokenizes the `htmlStream` and populates a PageSummary
-//struct with the page's summary meta-data.
+
+ // Handles the tokinization of the 'htmlStream' and sends that meta-data
+ // to fill the PageSummary struct
 func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, error) {
 	/*TODO: tokenize the `htmlStream` and extract the page summary meta-data
 	according to the assignment description.
@@ -134,8 +156,11 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 	*/
 	resSummary := &PageSummary{}
 
+	// Creating a new Tokenizer with the htmlStream
 	tokenizer := html.NewTokenizer(htmlStream)
 
+	//Looping through till finding the first
+	//StartTagToken or SelfClosingTagToken and its data
 	for {
 		tokenType := tokenizer.Next()
 		token := tokenizer.Token()
@@ -147,10 +172,14 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 			return nil, err
 		}
 		if tokenType == html.StartTagToken || tokenType == html.SelfClosingTagToken {
+			//SelfClosingTagToken or StartTagToken have been found
 			if token.Data == "meta" {
+				
 				property := getTargetAttr(token, "property")
 				name := getTargetAttr(token, "name")
 				content := getTargetAttr(token, "content")
+
+				// Assiging variables based on meta property tag
 				switch property {
 				case "og:type":
 					resSummary.Type = content
@@ -171,6 +200,8 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 					resSummary.Author = content
 				}
 
+				// Spliting keywords into an array
+				// And storing that array
 				if name == "keywords" {
 					arr := strings.Split(content, ",")
 					for i := range arr {
@@ -179,6 +210,9 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 					resSummary.Keywords = arr
 				}
 
+
+				// If it is a image tag, assign variables accordingly
+				// to allow for preview of image
 				if strings.HasPrefix(property, "og:image") {
 					if strings.HasPrefix(property, "og:image:") {
 						recentImage := resSummary.Images[len(resSummary.Images)-1]
@@ -205,6 +239,8 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 					}
 				}
 			}
+
+			// Assigning the title tag 
 			if token.Data == "title" && resSummary.Title == "" {
 				next := tokenizer.Next()
 				if next == html.TextToken {
@@ -212,6 +248,8 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 				}
 			}
 
+			// If the Token Data is a link,
+			// it shows a preview of the image
 			if token.Data == "link" {
 				icon := &PreviewImage{}
 				rel := getTargetAttr(token, "rel")
@@ -236,6 +274,7 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 			}
 		}
 
+		//Only looking at tokens within HEAD html tags
 		if tokenType == html.EndTagToken && token.Data == "head" {
 			break
 		}
@@ -244,6 +283,7 @@ func extractSummary(pageURL string, htmlStream io.ReadCloser) (*PageSummary, err
 }
 
 
+// Returning the target attribute of a Token
 func getTargetAttr(token html.Token, target string) string {
 	for _, a := range token.Attr {
 		if a.Key == target {
@@ -253,6 +293,8 @@ func getTargetAttr(token html.Token, target string) string {
 	return ""
 }
 
+
+// Converting from relative URL to return a absoluteURL
 func getAbsoluteURL(absoluteBase string, relative string) string {
 	absoluteURL, _ := url.Parse(absoluteBase)
 	relativeURL, _ := url.Parse(relative)
